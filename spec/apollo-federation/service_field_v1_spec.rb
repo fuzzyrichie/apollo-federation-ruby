@@ -594,4 +594,72 @@ RSpec.describe ApolloFederation::ServiceField do
       end
     end
   end
+
+  # GraphQL::Execution::Next didn't exist before graphql-ruby 2.6; guarded rather than pinned to
+  # this repo's own (older) Gemfile.lock version so it activates automatically once that's bumped.
+  if defined?(GraphQL::Execution::Next)
+    describe 'under GraphQL::Execution::Next', :next_execution do
+      let(:base_field) do
+        Class.new(GraphQL::Schema::Field) do
+          include ApolloFederation::Field
+        end
+      end
+
+      let(:base_object) do
+        base_field_class = base_field
+        Class.new(GraphQL::Schema::Object) do
+          include ApolloFederation::Object
+          field_class base_field_class
+        end
+      end
+
+      let(:query) do
+        Class.new(base_object) do
+          graphql_name 'Query'
+          field :test, String, null: false
+
+          def test
+            'hello'
+          end
+        end
+      end
+
+      let(:schema) do
+        query_class = query
+        built_schema = Class.new(GraphQL::Schema) do
+          include ApolloFederation::Schema
+          query query_class
+          use GraphQL::Dataloader
+          self.dataloader_class = GraphQL::Dataloader
+        end
+        built_schema.extend(GraphQL::Execution::Next::SchemaExtension)
+        built_schema
+      end
+
+      let(:service_query) { '{ _service { sdl } }' }
+
+      let(:classic_result) { schema.execute(service_query, root_value: nil).to_h }
+      let(:next_result) { schema.execute_next(service_query, context: {}, root_value: nil).to_h }
+
+      # Regression test: before this fix, the plain `field(:_service, ...)` (no execution-mode
+      # annotation) fell back to Next's default :direct_send, which calls the raw Query
+      # root_value (nil, by default) instead of the wrapped Query object, raising
+      # `NoMethodError: undefined method '_service' for nil`. And Service#sdl's plain
+      # `field(:sdl, ...)` (no hash_key:) hit the same :direct_send gap one level down, on the
+      # `{ sdl: ... }` Hash _service resolves to.
+      it 'resolves the same as classic execution' do
+        expect(next_result).to eq(classic_result)
+      end
+
+      it 'returns the federation SDL' do
+        expect(next_result.dig('data', '_service', 'sdl')).to match_sdl(
+          <<~GRAPHQL,
+            type Query {
+              test: String!
+            }
+          GRAPHQL
+        )
+      end
+    end
+  end
 end

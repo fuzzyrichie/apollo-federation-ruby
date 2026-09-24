@@ -621,7 +621,7 @@ RSpec.describe ApolloFederation::EntitiesField do
   # GraphQL::Execution::Next didn't exist before graphql-ruby 2.6; guarded rather than pinned to
   # this repo's own (older) Gemfile.lock version so it activates automatically once that's bumped.
   if defined?(GraphQL::Execution::Next)
-    describe 'under GraphQL::Execution::Next' do
+    describe 'under GraphQL::Execution::Next', :next_execution do
       let(:base_field) do
         Class.new(GraphQL::Schema::Field) do
           include ApolloFederation::Field

@@ -2,16 +2,10 @@
 
 require 'graphql'
 require 'apollo-federation/any'
+require 'apollo-federation/next_execution_support'
 
 module ApolloFederation
   module EntitiesField
-    # `resolve_static:` (and GraphQL::Execution::Next generally) doesn't exist on every
-    # graphql-ruby version this gem supports, so detect it at the Field#initialize signature
-    # rather than assuming a minimum graphql-ruby version.
-    RESOLVE_STATIC_SUPPORTED = GraphQL::Schema::Field.instance_method(:initialize).parameters.any? do |_type, name|
-      name == :resolve_static
-    end
-
     def self.included(base)
       base.extend(ClassMethods)
     end
@@ -32,7 +26,7 @@ module ApolloFederation
         # Without this, Next's default :direct_send calls the field's raw backing object --
         # the Query root's root_value, nil by default -- instead of the wrapped Query object,
         # raising `NoMethodError: undefined method '_entities' for nil`.
-        entities_field_options = RESOLVE_STATIC_SUPPORTED ? { resolve_static: true } : {}
+        entities_field_options = ApolloFederation::RESOLVE_STATIC_SUPPORTED ? { resolve_static: true } : {}
         field(:_entities, [entity_type, null: true], null: false, **entities_field_options) do
           argument :representations, [Any], required: true
         end
