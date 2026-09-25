@@ -14,11 +14,7 @@ module ApolloFederation
       extend GraphQL::Schema::Member::HasFields
 
       def define_service_field
-        # resolve_static: dispatches to the class method below under GraphQL::Execution::Next;
-        # classic ignores it and dispatches to the instance method, which delegates back here.
-        # Without this, Next's default :direct_send calls the field's raw backing object --
-        # the Query root's root_value, nil by default -- instead of the wrapped Query object,
-        # raising `NoMethodError: undefined method '_service' for nil`.
+        # resolve_static so Next dispatches to the class method below, not root_value.
         service_field_options = ApolloFederation::RESOLVE_STATIC_SUPPORTED ? { resolve_static: true } : {}
         field(:_service, Service, null: false, **service_field_options)
       end

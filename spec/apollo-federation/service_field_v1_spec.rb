@@ -641,12 +641,7 @@ RSpec.describe ApolloFederation::ServiceField do
       let(:classic_result) { schema.execute(service_query, root_value: nil).to_h }
       let(:next_result) { schema.execute_next(service_query, context: {}, root_value: nil).to_h }
 
-      # Regression test: before this fix, the plain `field(:_service, ...)` (no execution-mode
-      # annotation) fell back to Next's default :direct_send, which calls the raw Query
-      # root_value (nil, by default) instead of the wrapped Query object, raising
-      # `NoMethodError: undefined method '_service' for nil`. And Service#sdl's plain
-      # `field(:sdl, ...)` (no hash_key:) hit the same :direct_send gap one level down, on the
-      # `{ sdl: ... }` Hash _service resolves to.
+      # Covers both _service's own resolve_static and Service#sdl's hash_key:.
       it 'resolves the same as classic execution' do
         expect(next_result).to eq(classic_result)
       end

@@ -21,18 +21,32 @@ module ApolloFederation
           possible_types(*possible_entities)
         end
 
-        # resolve_static: dispatches to the class method below under GraphQL::Execution::Next;
-        # classic ignores it and dispatches to the instance method, which delegates back here.
-        # Without this, Next's default :direct_send calls the field's raw backing object --
-        # the Query root's root_value, nil by default -- instead of the wrapped Query object,
-        # raising `NoMethodError: undefined method '_entities' for nil`.
-        entities_field_options = ApolloFederation::RESOLVE_STATIC_SUPPORTED ? { resolve_static: true } : {}
+        # resolve_static so Next dispatches to resolve_entities_for_next, not root_value; a
+        # separate method from _entities since Next needs a fully-synced Array, not a Lazy.
+        if ApolloFederation::RESOLVE_STATIC_SUPPORTED
+          entities_field_options = { resolve_static: :resolve_entities_for_next }
+        else
+          entities_field_options = {}
+        end
         field(:_entities, [entity_type, null: true], null: false, **entities_field_options) do
           argument :representations, [Any], required: true
         end
       end
 
       def _entities(context, representations:)
+        build_entities(context, representations)
+      end
+
+      def resolve_entities_for_next(context, representations:)
+        final_result = build_entities(context, representations).value
+        # Resolving the outer Lazy doesn't resolve each entry: a per-reference resolve_reference
+        # lazy value comes back wrapped in its own Lazy from the after_lazy call in build_entities.
+        final_result.map { |entry| entry.is_a?(GraphQL::Execution::Lazy) ? entry.value : entry }
+      end
+
+      private
+
+      def build_entities(context, representations)
         final_result = Array.new(representations.size)
         grouped_references_with_indices =
           representations
@@ -89,10 +103,8 @@ module ApolloFederation
         # entry for each requested entity
         GraphQL::Execution::Lazy.all(maybe_lazies).then do
           final_result
-        end.value
+        end
       end
-
-      private
 
       def class_of_type(type)
         if defined?(GraphQL::ObjectType) && type.is_a?(GraphQL::ObjectType)
